@@ -7,7 +7,6 @@ Progress is reported via callbacks.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -16,6 +15,7 @@ import numpy as np
 import soundfile as sf
 
 from qwen_reader.core.model import ModelConfig, get_model
+from qwen_reader.core.storage import DEFAULT_OUTPUT_DIR
 from qwen_reader.core.text import (
     SUPPORTED_EXTENSIONS,
     chunk_text,
@@ -26,10 +26,6 @@ from qwen_reader.core.text import (
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-DEFAULT_OUTPUT_DIR = Path(
-    os.getenv("QWEN_TTS_OUTPUT_DIR", str(Path.home() / "qwen-reader-audio"))
-)
 
 
 @dataclass

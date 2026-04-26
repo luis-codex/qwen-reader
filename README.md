@@ -6,8 +6,8 @@
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-73%20passed-brightgreen)](#-testing)
-[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](#-coverage)
+[![Tests](https://img.shields.io/badge/tests-82%20passed-brightgreen)](#-testing)
+[![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)](#-coverage)
 [![Powered by](https://img.shields.io/badge/powered%20by-Qwen3--TTS-purple)](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice)
 
 Turn your markdown notes, articles, and text files into podcast-style audio you can listen to anywhere — powered by local AI inference on your GPU.
@@ -184,7 +184,8 @@ This project follows **Clean Architecture** with strict layer boundaries and a u
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│  Interface Layer                          cli.py          │
+│  Interface Layer                           cli/           │
+│  app.py · commands.py · options.py · rendering.py         │
 │  click + rich · args, output, exit codes                  │
 ├───────────────────────────────────────────────────────────┤
 │  Use-Case Layer                    core/synthesis.py      │
@@ -192,8 +193,10 @@ This project follows **Clean Architecture** with strict layer boundaries and a u
 ├──────────────────────┬────────────────────────────────────┤
 │  Domain Layer        │  Infrastructure Layer              │
 │  core/text.py        │  core/model.py                     │
-│  Pure text transforms│  Model lifecycle, GPU management   │
-│  stdlib only (re)    │  torch, qwen_tts (deferred import) │
+│  core/storage.py     │  Model lifecycle, GPU management   │
+│  Pure transforms,    │  torch, qwen_tts (deferred import) │
+│  file listing        │                                    │
+│  stdlib only         │                                    │
 └──────────────────────┴────────────────────────────────────┘
 ```
 
@@ -212,27 +215,34 @@ No inner layer ever imports an outer layer. Core modules never call `print()`, `
 qwen_reader/
 ├── __init__.py              # Package version
 ├── __main__.py              # python -m qwen_reader entry
-├── cli.py                   # Interface layer (click + rich)
+├── cli/
+│   ├── __init__.py          # Re-exports cli, main
+│   ├── app.py               # Click group, entry point, Windows UTF-8
+│   ├── commands.py          # read, speak, speakers, list commands
+│   ├── options.py           # Shared option decorators
+│   └── rendering.py         # Rich console, progress bars, result panel
 └── core/
     ├── __init__.py          # Docstring only — no re-exports
     ├── text.py              # Domain: text cleaning & chunking
+    ├── storage.py           # Domain: audio file listing & output dir
     ├── model.py             # Infrastructure: lazy model singleton
     └── synthesis.py         # Use-Case: audio generation orchestration
 
 tests/
 ├── conftest.py              # FakeModel stub + shared fixtures
 ├── test_text.py             # Domain layer — no mocks, stdlib only
+├── test_storage.py          # Domain layer — file listing, no mocks
 ├── test_synthesis.py        # Use-Case layer — mocked infrastructure
 └── test_cli.py              # Interface layer — click CliRunner
 ```
 
 ### Layer contract
 
-| Layer | Module | Responsibility | Allowed deps | Forbidden |
-|-------|--------|----------------|--------------|-----------|
-| **Interface** | `cli.py` | Parse args, render output, map exit codes | click, rich, Use-Case | torch, numpy, direct I/O |
+| Layer | Module(s) | Responsibility | Allowed deps | Forbidden |
+|-------|-----------|----------------|--------------|-----------|
+| **Interface** | `cli/app.py`, `cli/commands.py`, `cli/options.py`, `cli/rendering.py` | Parse args, render output, map exit codes | click, rich, Use-Case | torch, numpy, direct I/O |
 | **Use-Case** | `core/synthesis.py` | Orchestrate domain + infra into workflows | Domain, Infrastructure, numpy, soundfile | click, rich, `print()` |
-| **Domain** | `core/text.py` | Pure text transforms, chunk splitting | **stdlib only** (`re`) | Any third-party package |
+| **Domain** | `core/text.py`, `core/storage.py` | Pure text transforms, file listing | **stdlib only** (`re`, `os`, `time`) | Any third-party package |
 | **Infrastructure** | `core/model.py` | External system lifecycle (model load, GPU) | torch, qwen_tts, stdlib | click, rich, domain logic |
 
 ### Cross-layer communication
@@ -252,6 +262,7 @@ Each architectural layer has its own test file with a tailored testing approach:
 | File | Layer | Tests | Mocking | Speed |
 |------|-------|-------|---------|-------|
 | `test_text.py` | Domain | 37 | None — pure functions, stdlib only | < 1ms per test |
+| `test_storage.py` | Domain | 9 | None — real temp files | < 1ms per test |
 | `test_synthesis.py` | Use-Case | 17 | `FakeModel` stubs infrastructure | < 100ms per test |
 | `test_cli.py` | Interface | 19 | `patch_model` + `CliRunner` | < 500ms per test |
 
@@ -273,11 +284,15 @@ python -m pytest tests/test_text.py -v
 | Module | Stmts | Miss | Cover |
 |--------|-------|------|-------|
 | `__init__.py` | 1 | 0 | 100% |
-| `cli.py` | 152 | 10 | 93% |
+| `cli/app.py` | 22 | 2 | 91% |
+| `cli/commands.py` | 103 | 8 | 92% |
+| `cli/options.py` | 12 | 0 | **100%** |
+| `cli/rendering.py` | 22 | 0 | **100%** |
 | `core/text.py` | 52 | 0 | **100%** |
-| `core/synthesis.py` | 75 | 3 | 96% |
+| `core/storage.py` | 35 | 0 | **100%** |
+| `core/synthesis.py` | 74 | 3 | 96% |
 | `core/model.py` | 33 | 15 | 55% |
-| **Total** | **315** | **30** | **90%** |
+| **Total** | **358** | **30** | **92%** |
 
 > [!NOTE]
 > `core/model.py` coverage is lower by design — it wraps `torch` and `qwen_tts` which are mocked in tests. The remaining uncovered lines are the actual model loading path that requires a GPU.
@@ -288,7 +303,7 @@ python -m pytest tests/test_text.py -v
 |-------|---------|--------|--------|
 | Domain | 90% | 100% | ✅ 100% |
 | Use-Case | 80% | 90% | ✅ 96% |
-| Interface | 60% | 80% | ✅ 93% |
+| Interface | 60% | 80% | ✅ 92% |
 
 ## 🔒 Error handling & exit codes
 
@@ -310,7 +325,7 @@ python -m pytest tests/test_text.py -v
 | `1` | One or more operations failed |
 | `2` | CLI usage error (missing args, bad flags) |
 
-Core modules never call `sys.exit()` — they raise typed exceptions. Only `cli.py` converts exceptions to exit codes.
+Core modules never call `sys.exit()` — they raise typed exceptions. Only `cli/commands.py` converts exceptions to exit codes.
 
 ## ⚙️ Configuration
 
@@ -348,8 +363,8 @@ Every item must pass before merge to `main`.
 
 ### Architecture (A1–A5)
 
-- [x] Interface layer imports no infrastructure/domain heavy deps
-- [x] Domain layer (`core/text.py`) has zero third-party imports
+- [x] Interface layer (`cli/`) imports no infrastructure/domain heavy deps
+- [x] Domain layer (`core/text.py`, `core/storage.py`) has zero third-party imports
 - [x] Core modules never call `print()`, `sys.exit()`, or import `click`/`rich`
 - [x] All cross-layer data flows via `@dataclass` or callbacks
 - [x] Heavy imports (torch, model libs) are deferred inside functions
@@ -388,7 +403,7 @@ Every item must pass before merge to `main`.
 
 ### Testing (T1–T3)
 
-- [x] Domain layer has unit tests with no mocks (37 tests)
+- [x] Domain layer has unit tests with no mocks (46 tests)
 - [x] Use-Case layer has tests that mock infrastructure (17 tests)
 - [x] CLI layer has click `CliRunner` tests (19 tests)
 
