@@ -35,7 +35,7 @@ Turn your markdown notes, articles, and text files into podcast-style audio you 
 ### Setup
 
 ```bash
-git clone https://github.com/your-username/qwen-reader.git
+git clone https://github.com/luis-codex/qwen-reader.git
 cd qwen-reader
 
 # Create virtual environment and install
