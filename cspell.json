@@ -1,0 +1,12 @@
+{
+  "version": "0.2",
+  "words": [
+    "qwen",
+    "blockquotes",
+    "wavs",
+    "Aiden",
+    "bfloat",
+    "soundfile",
+    "torchaudio"
+  ]
+}
