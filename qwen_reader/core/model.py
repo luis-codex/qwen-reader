@@ -16,7 +16,20 @@ from typing import Any, Callable, Optional
 # ---------------------------------------------------------------------------
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
-DEFAULT_DEVICE = "cuda:0"
+
+
+def _detect_device() -> str:
+    """Return the best available device (cuda:0 → cpu)."""
+    env = os.getenv("QWEN_TTS_DEVICE")
+    if env:
+        return env
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda:0"
+    except ImportError:
+        pass
+    return "cpu"
 
 
 @dataclass(frozen=True)
@@ -26,9 +39,7 @@ class ModelConfig:
     model_id: str = field(
         default_factory=lambda: os.getenv("QWEN_TTS_MODEL", DEFAULT_MODEL_ID)
     )
-    device: str = field(
-        default_factory=lambda: os.getenv("QWEN_TTS_DEVICE", DEFAULT_DEVICE)
-    )
+    device: str = field(default_factory=_detect_device)
 
 
 # ---------------------------------------------------------------------------

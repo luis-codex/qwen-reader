@@ -19,13 +19,14 @@ Turn your markdown notes, articles, and text files into podcast-style audio you 
 
 ## ✨ Features
 
+- **10 languages** — Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian
+- **9 premium voices** — Male and female speakers across languages, dialects, and age ranges
 - **Multi-format support** — `.md`, `.markdown`, `.txt`, `.rst`, `.text`
 - **Intelligent text cleaning** — Strips markdown syntax, code blocks, links, and front-matter before synthesis
 - **Batch processing** — Convert multiple files in a single command
-- **Multiple voices** — 7+ built-in speakers with natural, conversational tone
 - **Chunked synthesis** — Splits long text at sentence boundaries for consistent quality
 - **Rich CLI output** — Progress bars, tables, and styled panels via [Rich](https://github.com/Textualize/rich)
-- **GPU accelerated** — Runs on CUDA for fast inference
+- **GPU accelerated** — Runs on CUDA with auto-detection fallback to CPU
 
 ## 📦 Installation
 
@@ -47,10 +48,16 @@ uv pip install -e .
 
 # Install PyTorch with CUDA support (adjust cu128 to your CUDA version)
 uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# (Optional, Linux only) Install FlashAttention 2 for ~2x faster inference
+pip install -U flash-attn --no-build-isolation
 ```
 
 > [!NOTE]
 > The first run downloads the model (~3.5 GB) from HuggingFace. Subsequent runs load it from cache in ~30s.
+
+> [!TIP]
+> **FlashAttention 2** significantly reduces GPU memory usage and speeds up inference, but is only available on Linux with Ampere+ GPUs (RTX 30xx/40xx). Windows users can safely ignore the `flash-attn` warning — the manual PyTorch attention path works correctly, just slower.
 
 ### Developer setup
 
@@ -117,26 +124,46 @@ qwen-reader speak "Hello world, this is a test."
 qwen-reader speak "Hola mundo, esto es una prueba." --lang Spanish --speaker Vivian
 ```
 
+## 🌍 Audio Demos
+
+Pre-generated audio samples across all 10 supported languages are available in the [`demos/`](demos/) folder.
+Listen to them to hear the quality before setting up the tool yourself!
+
+| Sample | Language | Speaker | Voice |
+|--------|----------|---------|-------|
+| [`demo_english.wav`](demos/demo_english.wav) | 🇬🇧 English | Ryan | Dynamic male, strong rhythmic drive |
+| [`demo_spanish.wav`](demos/demo_spanish.wav) | 🇪🇸 Spanish | Vivian | Bright, edgy young female |
+| [`demo_chinese.wav`](demos/demo_chinese.wav) | 🇨🇳 Chinese | Serena | Warm, gentle young female |
+| [`demo_japanese.wav`](demos/demo_japanese.wav) | 🇯🇵 Japanese | Ono_Anna | Playful female, light nimble timbre |
+| [`demo_korean.wav`](demos/demo_korean.wav) | 🇰🇷 Korean | Sohee | Warm female, rich emotion |
+| [`demo_french.wav`](demos/demo_french.wav) | 🇫🇷 French | Aiden | Sunny American male |
+| [`demo_german.wav`](demos/demo_german.wav) | 🇩🇪 German | Aiden | Sunny American male |
+| [`demo_italian.wav`](demos/demo_italian.wav) | 🇮🇹 Italian | Vivian | Bright, edgy young female |
+| [`demo_portuguese.wav`](demos/demo_portuguese.wav) | 🇧🇷 Portuguese | Ryan | Dynamic male |
+| [`demo_russian.wav`](demos/demo_russian.wav) | 🇷🇺 Russian | Aiden | Sunny American male |
+
+> To regenerate all demos: `pwsh scripts/generate_demos.ps1`
+
 ### Explore voices
 
 ```bash
 qwen-reader speakers
 ```
 
-```
-  🎙️ Available Speakers
-┌───┬─────────┐
-│ # │ Name    │
-├───┼─────────┤
-│ 1 │ Aiden   │
-│ 2 │ Dylan   │
-│ 3 │ Eric    │
-│ 4 │ Ryan    │
-│ 5 │ Serena  │
-│ 6 │ Vivian  │
-│ … │ …       │
-└───┴─────────┘
-```
+| Speaker | Voice Description | Native Language |
+|---------|-------------------|-----------------|
+| Vivian | Bright, slightly edgy young female | Chinese |
+| Serena | Warm, gentle young female | Chinese |
+| Uncle_Fu | Seasoned male, low mellow timbre | Chinese |
+| Dylan | Youthful Beijing male, clear natural | Chinese (Beijing Dialect) |
+| Eric | Lively Chengdu male, husky brightness | Chinese (Sichuan Dialect) |
+| Ryan | Dynamic male, strong rhythmic drive | English |
+| Aiden | Sunny American male, clear midrange | English |
+| Ono_Anna | Playful Japanese female, light nimble | Japanese |
+| Sohee | Warm Korean female, rich emotion | Korean |
+
+> [!TIP]
+> Each speaker can speak **any** of the 10 supported languages, but sounds best in their native language.
 
 ### Browse generated files
 
@@ -165,7 +192,7 @@ qwen-reader list
 | `--instruct`   | `-i`  | _conversational_      | Style instruction for the TTS engine             |
 | `--output-dir` | `-o`  | `~/qwen-reader-audio` | Output directory                                 |
 | `--name`       | `-n`  | _filename stem_       | Custom output filename (without extension)       |
-| `--device`     | `-d`  | `cuda:0`              | Compute device (`cuda:0`, `cpu`)                 |
+| `--device`     | `-d`  | _auto-detected_       | Compute device (`cuda:0`, `cpu`) — auto-detects CUDA |
 | `--version`    | `-v`  | —                     | Show version                                     |
 | `--help`       | `-h`  | —                     | Show help                                        |
 
@@ -335,7 +362,7 @@ Configuration follows a strict priority order: **CLI flags → Environment varia
 | Variable              | Default                                | Description              |
 | --------------------- | -------------------------------------- | ------------------------ |
 | `QWEN_TTS_MODEL`      | `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | HuggingFace model ID     |
-| `QWEN_TTS_DEVICE`     | `cuda:0`                               | Inference device         |
+| `QWEN_TTS_DEVICE`     | _auto_ (`cuda:0` if available, else `cpu`) | Inference device         |
 | `QWEN_TTS_OUTPUT_DIR` | `~/qwen-reader-audio`                  | Default output directory |
 
 Environment variables are read inside `default_factory` on config dataclasses — never scattered through application logic.
@@ -350,6 +377,7 @@ Environment variables are read inside `default_factory` on config dataclasses �
 | [numpy](https://numpy.org/)                      | Audio array operations    |
 | [click](https://click.palletsprojects.com/)      | CLI framework             |
 | [rich](https://rich.readthedocs.io/)             | Terminal formatting       |
+| [flash-attn](https://github.com/Dao-AILab/flash-attention) _(optional, Linux)_ | ~2× faster inference, less VRAM |
 
 **Dev dependencies** (optional):
 
