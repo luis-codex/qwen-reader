@@ -1,3 +1,4 @@
+<img width="14135" height="6792" alt="image" src="https://github.com/user-attachments/assets/bd638001-e12b-49dd-8acf-2c33e83f427e" />
 <div align="center">
 
 # 🎧 qwen-reader
