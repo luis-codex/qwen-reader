@@ -17,6 +17,11 @@ from typing import Any, Callable, Optional
 
 DEFAULT_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
 
+QUALITY_PRESETS: dict[str, str] = {
+    "standard": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+    "fast": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+}
+
 
 def _detect_device() -> str:
     """Return the best available device (cuda:0 → cpu)."""
@@ -34,12 +39,29 @@ def _detect_device() -> str:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Immutable snapshot of model configuration."""
+    """Immutable snapshot of model configuration.
+
+    Attributes:
+        model_id: HuggingFace model identifier.
+        device: Compute device string (``cuda:0``, ``cpu``).
+        quality: Quality preset name (``standard`` or ``fast``).
+            When set, overrides *model_id* with the preset value.
+        compile_model: Apply ``torch.compile`` for inference acceleration.
+            Only effective on CUDA devices.
+    """
 
     model_id: str = field(
         default_factory=lambda: os.getenv("QWEN_TTS_MODEL", DEFAULT_MODEL_ID)
     )
     device: str = field(default_factory=_detect_device)
+    quality: str = "standard"
+    compile_model: bool = True
+
+    def resolved_model_id(self) -> str:
+        """Return the model ID, applying quality preset if applicable."""
+        if self.quality in QUALITY_PRESETS:
+            return QUALITY_PRESETS[self.quality]
+        return self.model_id
 
 
 # ---------------------------------------------------------------------------
@@ -74,15 +96,26 @@ def get_model(
     import torch
     from qwen_tts import Qwen3TTSModel
 
-    _emit(on_progress, f"Loading model: {cfg.model_id}")
+    resolved_id = cfg.resolved_model_id()
+    _emit(on_progress, f"Loading model: {resolved_id}")
     _emit(on_progress, f"Device: {cfg.device}")
+    _emit(on_progress, f"Quality: {cfg.quality}")
 
     t0 = time.time()
     _instance = Qwen3TTSModel.from_pretrained(
-        cfg.model_id,
+        resolved_id,
         device_map=cfg.device,
         dtype=torch.bfloat16,
     )
+
+    # Apply torch.compile for inference acceleration (CUDA only)
+    if cfg.compile_model and cfg.device.startswith("cuda"):
+        try:
+            _instance = torch.compile(_instance, mode="reduce-overhead")
+            _emit(on_progress, "torch.compile applied ✅")
+        except Exception:  # noqa: BLE001 — broad catch is intentional
+            _emit(on_progress, "torch.compile skipped (unsupported)")
+
     _config = cfg
 
     elapsed = time.time() - t0

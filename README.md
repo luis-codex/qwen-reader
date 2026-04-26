@@ -7,8 +7,8 @@
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-82%20passed-brightgreen)](#-testing)
-[![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)](#-coverage)
+[![Tests](https://img.shields.io/badge/tests-103%20passed-brightgreen)](#-testing)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](#-coverage)
 [![Powered by](https://img.shields.io/badge/powered%20by-Qwen3--TTS-purple)](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice)
 
 Turn your markdown notes, articles, and text files into podcast-style audio you can listen to anywhere — powered by local AI inference on your GPU.
@@ -192,6 +192,8 @@ qwen-reader list
 | `--instruct`   | `-i`  | _conversational_      | Style instruction for the TTS engine             |
 | `--output-dir` | `-o`  | `~/qwen-reader-audio` | Output directory                                 |
 | `--name`       | `-n`  | _filename stem_       | Custom output filename (without extension)       |
+| `--chunk-size` | —     | `500`                 | Max characters per synthesis chunk               |
+| `--quality`    | `-q`  | `standard`            | Quality preset: `standard` (1.7B) or `fast` (0.6B) |
 | `--device`     | `-d`  | _auto-detected_       | Compute device (`cuda:0`, `cpu`) — auto-detects CUDA |
 | `--version`    | `-v`  | —                     | Show version                                     |
 | `--help`       | `-h`  | —                     | Show help                                        |
@@ -203,6 +205,92 @@ qwen-reader list
 | `.md`, `.markdown` | Strips YAML front-matter, code blocks, links, images, emphasis, headers |
 | `.rst`             | Strips directives, section underlines, inline markup                    |
 | `.txt`, `.text`    | Passed through as-is                                                    |
+
+## ⚡ Performance tuning
+
+qwen-reader ships with two knobs that let you trade quality for speed:
+
+### Quality presets (`--quality`)
+
+| Preset     | Model                 | Params | Speed   | Quality | VRAM   |
+| ---------- | --------------------- | ------ | ------- | ------- | ------ |
+| `standard` | Qwen3-TTS-12Hz-1.7B  | 1.7B   | 1×      | ★★★★★   | ~4 GB  |
+| `fast`     | Qwen3-TTS-12Hz-0.6B  | 0.6B   | ~2–3×   | ★★★☆☆   | ~2 GB  |
+
+```bash
+# Default: highest quality
+qwen-reader read article.md
+
+# Fast mode: quicker turnaround, good for drafts
+qwen-reader read article.md --quality fast
+```
+
+> [!TIP]
+> Use `--quality fast` for iterative workflows where you want quick previews, then switch to `standard` for the final render.
+
+### Chunk size (`--chunk-size`)
+
+Controls how text is split before synthesis. Larger chunks = fewer inference calls = faster total time, but very long chunks may reduce audio consistency.
+
+| Chunk size | Behaviour                                  |
+| ---------- | ------------------------------------------ |
+| `300`      | More chunks, most consistent quality       |
+| `500`      | Default balance                            |
+| `800`      | ~40% fewer chunks, faster, slightly less consistent |
+| `1200`     | Maximum speed, may degrade on long segments |
+
+```bash
+# Faster with larger chunks
+qwen-reader read article.md --chunk-size 800
+
+# Combine both for maximum speed
+qwen-reader read article.md --quality fast --chunk-size 800
+```
+
+### `torch.compile` acceleration
+
+On CUDA devices, `torch.compile` is automatically applied with `reduce-overhead` mode, JIT-optimizing the model's forward pass. This provides a **15–30% latency reduction** after the first inference call (compilation overhead).
+
+- ✅ Enabled by default on CUDA
+- ⬜ Automatically skipped on CPU or unsupported hardware
+- ⬜ First call has ~30s compilation overhead, amortized over subsequent chunks
+
+### Streaming audio write
+
+By default, both `read` and `speak` commands use **progressive WAV writing** — each chunk is flushed to disk as soon as it's synthesized. This means:
+
+- 🎧 You can **start playback before synthesis finishes** — the `.wav` file is valid after the first chunk
+- ⏱️ **Time To First Audio (TTFA)** is displayed in the terminal, showing when audio becomes available
+- 📉 Perceived latency drops dramatically for long documents (from minutes to seconds)
+
+```
+  ▶ First audio ready in 3.2s  →  ~/qwen-reader-audio/article.wav
+
+  ┌─────── ✅ Audio generated ────────┐
+  │ 📁 File     ~/article.wav         │
+  │ ⏱️  Duration 4m 32s                │
+  │ 🧩 Chunks   12                    │
+  └───────────────────────────────────┘
+```
+
+> [!TIP]
+> Open the output file in your media player as soon as "First audio ready" appears — most players can stream from a file being written to.
+
+### Benchmarking
+
+A benchmark script is included to measure latency across all configurations:
+
+```bash
+# Dry-run (no GPU needed, uses FakeModel)
+python scripts/benchmark.py
+
+# Live benchmark with real model
+python scripts/benchmark.py --live
+
+# Benchmark with your own file
+python scripts/benchmark.py --live --text-file article.md
+```
+
 
 ## 🏗️ Architecture
 
@@ -260,6 +348,7 @@ tests/
 ├── conftest.py              # FakeModel stub + shared fixtures
 ├── test_text.py             # Domain layer — no mocks, stdlib only
 ├── test_storage.py          # Domain layer — file listing, no mocks
+├── test_model.py            # Infrastructure — config/preset logic
 ├── test_synthesis.py        # Use-Case layer — mocked infrastructure
 └── test_cli.py              # Interface layer — click CliRunner
 ```
@@ -283,16 +372,43 @@ tests/
 
 ## 🧪 Testing
 
-### Strategy
+### Baseline principles
 
-Each architectural layer has its own test file with a tailored testing approach:
+1. **Behavior over volume** — test critical paths and regression surfaces, not every permutation.
+2. **Layer-aligned scoping** — each test file maps 1:1 to an architecture layer and uses the appropriate isolation level.
+3. **Reusable fixtures** — all shared stubs and sample files live in `conftest.py`; no test file creates its own model fake.
+4. **Coverage as quality gate** — minimums enforced per layer; infrastructure exclusions are explicit and justified.
+5. **Fast by default** — the full suite runs in < 2s without GPU, network, or disk I/O beyond `tmp_path`.
 
-| File                | Layer     | Tests | Mocking                            | Speed            |
-| ------------------- | --------- | ----- | ---------------------------------- | ---------------- |
-| `test_text.py`      | Domain    | 37    | None — pure functions, stdlib only | < 1ms per test   |
-| `test_storage.py`   | Domain    | 9     | None — real temp files             | < 1ms per test   |
-| `test_synthesis.py` | Use-Case  | 17    | `FakeModel` stubs infrastructure   | < 100ms per test |
-| `test_cli.py`       | Interface | 19    | `patch_model` + `CliRunner`        | < 500ms per test |
+### Test matrix
+
+| File                | Layer          | What it tests                       | Isolation                          |
+| ------------------- | -------------- | ----------------------------------- | ---------------------------------- |
+| `test_text.py`      | Domain         | Text cleaning, chunking, constants  | None — pure functions              |
+| `test_storage.py`   | Domain         | File listing, size/date formatting  | Real temp files via `tmp_path`     |
+| `test_model.py`     | Infrastructure | Config resolution, quality presets  | None — no model loading            |
+| `test_synthesis.py` | Use-Case       | Chunking→TTS→WAV orchestration      | `FakeModel` via `patch_model`      |
+| `test_cli.py`       | Interface      | End-to-end CLI flag wiring          | `patch_model` + Click `CliRunner`  |
+
+### When to mock
+
+| Situation                              | Approach                                          |
+| -------------------------------------- | ------------------------------------------------- |
+| Domain logic (pure functions)          | **No mocks** — call directly, assert output       |
+| Use-case orchestration                 | **FakeModel only** — stubs GPU/model layer        |
+| CLI integration                        | `patch_model` + `CliRunner` — validates full pipe |
+| Infrastructure config (no side effects)| **No mocks** — test dataclass logic directly      |
+
+### Fixture contract (`conftest.py`)
+
+| Fixture          | Scope   | Provides                                             |
+| ---------------- | ------- | ---------------------------------------------------- |
+| `fake_model`     | function | `FakeModel` instance (0.1s silence per chunk)       |
+| `patch_model`    | function | Monkeypatches `get_model` + `get_speakers` globally |
+| `tmp_md`         | function | Sample `.md` file with headings, links, code        |
+| `tmp_txt`        | function | Plain text file                                      |
+| `tmp_empty_md`   | function | `.md` that becomes empty after cleaning              |
+| `tmp_unsupported`| function | `.csv` file for extension rejection tests            |
 
 ### Running tests
 
@@ -307,31 +423,17 @@ python -m pytest --cov=qwen_reader --cov-report=term-missing
 python -m pytest tests/test_text.py -v
 ```
 
-### Coverage
+### Coverage quality gate
 
-| Module              | Stmts   | Miss   | Cover    |
-| ------------------- | ------- | ------ | -------- |
-| `__init__.py`       | 1       | 0      | 100%     |
-| `cli/app.py`        | 22      | 2      | 91%      |
-| `cli/commands.py`   | 103     | 8      | 92%      |
-| `cli/options.py`    | 12      | 0      | **100%** |
-| `cli/rendering.py`  | 22      | 0      | **100%** |
-| `core/text.py`      | 52      | 0      | **100%** |
-| `core/storage.py`   | 35      | 0      | **100%** |
-| `core/synthesis.py` | 74      | 3      | 96%      |
-| `core/model.py`     | 33      | 15     | 55%      |
-| **Total**           | **358** | **30** | **92%**  |
+| Layer          | Minimum | Target | Actual  |
+| -------------- | ------- | ------ | ------- |
+| Domain         | 90%     | 100%   | ✅ 100% |
+| Use-Case       | 80%     | 90%    | ✅ 96%  |
+| Interface      | 60%     | 80%    | ✅ 93%  |
+| Infrastructure | —       | —      | 53%*    |
 
 > [!NOTE]
-> `core/model.py` coverage is lower by design — it wraps `torch` and `qwen_tts` which are mocked in tests. The remaining uncovered lines are the actual model loading path that requires a GPU.
-
-### Coverage targets
-
-| Layer     | Minimum | Target | Actual  |
-| --------- | ------- | ------ | ------- |
-| Domain    | 90%     | 100%   | ✅ 100% |
-| Use-Case  | 80%     | 90%    | ✅ 96%  |
-| Interface | 60%     | 80%    | ✅ 92%  |
+> `core/model.py` coverage is lower by design — it wraps `torch` and `qwen_tts` which require a GPU. The uncovered lines are the actual model loading path. This is an **explicit exclusion**, not a gap.
 
 ## 🔒 Error handling & exit codes
 

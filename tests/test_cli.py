@@ -97,6 +97,33 @@ class TestReadCommand:
         assert result.exit_code == 0
         assert (tmp_path / "my-podcast.wav").exists()
 
+    def test_quality_fast(self, runner: CliRunner, patch_model, tmp_md: Path, tmp_path: Path):
+        result = runner.invoke(cli, [
+            "read", str(tmp_md),
+            "--output-dir", str(tmp_path),
+            "--device", "cpu",
+            "--quality", "fast",
+        ])
+        assert result.exit_code == 0
+        assert "Audio generated" in result.output
+
+    def test_custom_chunk_size(self, runner: CliRunner, patch_model, tmp_md: Path, tmp_path: Path):
+        result = runner.invoke(cli, [
+            "read", str(tmp_md),
+            "--output-dir", str(tmp_path),
+            "--device", "cpu",
+            "--chunk-size", "800",
+        ])
+        assert result.exit_code == 0
+        assert "Audio generated" in result.output
+
+    def test_invalid_quality_rejected(self, runner: CliRunner):
+        result = runner.invoke(cli, [
+            "read", "dummy.md",
+            "--quality", "ultra",
+        ])
+        assert result.exit_code == 2  # usage error
+
 
 # =====================================================================
 # speak command

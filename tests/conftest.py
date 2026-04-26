@@ -1,4 +1,16 @@
-"""Shared fixtures for the qwen-reader test suite."""
+"""Central test fixtures for qwen-reader.
+
+This is the single source of truth for test isolation:
+- ``FakeModel``: deterministic stub (0.1s silence per chunk, 24 kHz).
+- ``patch_model``: monkeypatches ``get_model`` / ``get_speakers`` in both
+  ``core.model`` and ``core.synthesis`` so no test ever loads a real model.
+- File fixtures: reusable sample files for each supported format.
+
+Rules:
+  1. No test file should create its own model fake — use ``patch_model``.
+  2. All temp files go through ``tmp_path`` (pytest built-in).
+  3. Fixtures are function-scoped by default (no cross-test state).
+"""
 
 from __future__ import annotations
 

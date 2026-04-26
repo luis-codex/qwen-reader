@@ -6,6 +6,7 @@ calls and delegates all output formatting to ``rendering.py``.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import click
@@ -22,11 +23,17 @@ from qwen_reader.cli.rendering import (
     console,
     model_progress_bar,
     print_result,
+    print_ttfa,
     synthesis_progress_bar,
 )
 from qwen_reader.core.model import ModelConfig, get_speakers
 from qwen_reader.core.storage import DEFAULT_OUTPUT_DIR, list_audio_files
-from qwen_reader.core.synthesis import SynthesisConfig, synthesize_file, synthesize_text
+from qwen_reader.core.synthesis import (
+    SynthesisConfig,
+    synthesize_file,
+    synthesize_text,
+    synthesize_text_streaming,
+)
 
 
 # ---- read ----------------------------------------------------------------
@@ -37,15 +44,15 @@ from qwen_reader.core.synthesis import SynthesisConfig, synthesize_file, synthes
 @apply_options(voice_options)
 @apply_options(output_options)
 @apply_options(hw_options)
-def read(files, speaker, lang, instruct, output_dir, name, device):
+def read(files, speaker, lang, instruct, output_dir, name, chunk_size, device, quality):
     """Convert one or more files to audio.
 
     Supports: .md .markdown .txt .rst .text
     """
-    mcfg = ModelConfig(device=device)
+    mcfg = ModelConfig(device=device, quality=quality)
     scfg = SynthesisConfig(
         language=lang, speaker=speaker, instruct=instruct,
-        output_dir=Path(output_dir),
+        output_dir=Path(output_dir), chunk_size=chunk_size,
     )
 
     # Load model with spinner
@@ -68,12 +75,18 @@ def read(files, speaker, lang, instruct, output_dir, name, device):
 
         name_override = name if (name and len(files) == 1) else None
 
+        t0 = time.perf_counter()
+
         with synthesis_progress_bar() as progress:
             synth_task = progress.add_task(f"Synthesizing {path.name}", total=0)
 
             def on_chunk(current: int, total: int, preview: str):
                 progress.update(synth_task, total=total, completed=current,
                                 description=f"[dim]{preview[:50]}…")
+
+            def on_first_audio(audio_path: Path):
+                ttfa = time.perf_counter() - t0
+                print_ttfa(audio_path, ttfa)
 
             try:
                 result = synthesize_file(
@@ -82,7 +95,9 @@ def read(files, speaker, lang, instruct, output_dir, name, device):
                     config=scfg,
                     model_config=mcfg,
                     on_chunk=on_chunk,
+                    on_first_audio=on_first_audio,
                     on_model_progress=lambda _: None,
+                    streaming=True,
                 )
             except (FileNotFoundError, ValueError, RuntimeError) as exc:
                 console.print(f"  [red]❌ {exc}[/red]")
@@ -108,15 +123,15 @@ def read(files, speaker, lang, instruct, output_dir, name, device):
 @apply_options(voice_options)
 @apply_options(output_options)
 @apply_options(hw_options)
-def speak(text, speaker, lang, instruct, output_dir, name, device):
+def speak(text, speaker, lang, instruct, output_dir, name, chunk_size, device, quality):
     """Convert inline text to audio.
 
     Example: qwen-reader speak "Hello world, this is a test."
     """
-    mcfg = ModelConfig(device=device)
+    mcfg = ModelConfig(device=device, quality=quality)
     scfg = SynthesisConfig(
         language=lang, speaker=speaker, instruct=instruct,
-        output_dir=Path(output_dir),
+        output_dir=Path(output_dir), chunk_size=chunk_size,
     )
     out_name = name or "spoken_text"
 
@@ -125,6 +140,8 @@ def speak(text, speaker, lang, instruct, output_dir, name, device):
         from qwen_reader.core.model import get_model
         get_model(mcfg, on_progress=lambda msg: progress.update(task, description=msg))
 
+    t0 = time.perf_counter()
+
     with synthesis_progress_bar() as progress:
         synth_task = progress.add_task("Synthesizing…", total=0)
 
@@ -132,13 +149,18 @@ def speak(text, speaker, lang, instruct, output_dir, name, device):
             progress.update(synth_task, total=total, completed=current,
                             description=f"[dim]{preview[:50]}…")
 
+        def on_first_audio(audio_path: Path):
+            ttfa = time.perf_counter() - t0
+            print_ttfa(audio_path, ttfa)
+
         try:
-            result = synthesize_text(
+            result = synthesize_text_streaming(
                 text=text,
                 output_name=out_name,
                 config=scfg,
                 model_config=mcfg,
                 on_chunk=on_chunk,
+                on_first_audio=on_first_audio,
                 on_model_progress=lambda _: None,
             )
         except (ValueError, RuntimeError) as exc:
@@ -153,9 +175,9 @@ def speak(text, speaker, lang, instruct, output_dir, name, device):
 
 @cli.command()
 @apply_options(hw_options)
-def speakers(device):
+def speakers(device, quality):
     """List available TTS voices."""
-    mcfg = ModelConfig(device=device)
+    mcfg = ModelConfig(device=device, quality=quality)
 
     with model_progress_bar() as progress:
         task = progress.add_task("Loading model…")

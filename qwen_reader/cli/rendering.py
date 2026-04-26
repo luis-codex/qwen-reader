@@ -49,6 +49,16 @@ def print_result(result: SynthesisResult) -> None:
     )
 
 
+def print_ttfa(path: "Path", ttfa_seconds: float) -> None:
+    """Display the Time To First Audio metric (streaming mode)."""
+    from pathlib import Path  # avoid circular import at module level
+
+    console.print(
+        f"  [bold green]▶ First audio ready[/] in "
+        f"[bold]{ttfa_seconds:.1f}s[/]  →  [dim]{path}[/dim]"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Progress bars
 # ---------------------------------------------------------------------------

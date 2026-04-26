@@ -44,6 +44,13 @@ output_options = [
         default=None,
         help="Custom output filename (no extension).",
     ),
+    click.option(
+        "--chunk-size",
+        type=int,
+        default=500, show_default=True,
+        help="Max characters per synthesis chunk. Larger = fewer chunks (faster) "
+             "but may reduce audio quality for very long segments.",
+    ),
 ]
 
 hw_options = [
@@ -51,6 +58,13 @@ hw_options = [
         "--device", "-d",
         default="cuda:0", show_default=True,
         help="Compute device: cuda:0, cpu, etc.",
+    ),
+    click.option(
+        "--quality", "-q",
+        type=click.Choice(["standard", "fast"], case_sensitive=False),
+        default="standard", show_default=True,
+        help="Quality preset: standard (1.7B model, best quality) or "
+             "fast (0.6B model, ~2-3× faster, lower quality).",
     ),
 ]
 

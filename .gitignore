@@ -20,3 +20,6 @@ htmlcov/
 # OS
 Thumbs.db
 .DS_Store
+
+# Benchmark
+.benchmark_output/
