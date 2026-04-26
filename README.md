@@ -157,24 +157,24 @@ qwen-reader list
 
 ### Full option reference
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--speaker` | `-s` | `Aiden` | TTS voice to use |
-| `--lang` | `-l` | `Auto` | Language (Auto, English, Chinese, Spanish, etc.) |
-| `--instruct` | `-i` | *conversational* | Style instruction for the TTS engine |
-| `--output-dir` | `-o` | `~/qwen-reader-audio` | Output directory |
-| `--name` | `-n` | *filename stem* | Custom output filename (without extension) |
-| `--device` | `-d` | `cuda:0` | Compute device (`cuda:0`, `cpu`) |
-| `--version` | `-v` | — | Show version |
-| `--help` | `-h` | — | Show help |
+| Option         | Short | Default               | Description                                      |
+| -------------- | ----- | --------------------- | ------------------------------------------------ |
+| `--speaker`    | `-s`  | `Aiden`               | TTS voice to use                                 |
+| `--lang`       | `-l`  | `Auto`                | Language (Auto, English, Chinese, Spanish, etc.) |
+| `--instruct`   | `-i`  | _conversational_      | Style instruction for the TTS engine             |
+| `--output-dir` | `-o`  | `~/qwen-reader-audio` | Output directory                                 |
+| `--name`       | `-n`  | _filename stem_       | Custom output filename (without extension)       |
+| `--device`     | `-d`  | `cuda:0`              | Compute device (`cuda:0`, `cpu`)                 |
+| `--version`    | `-v`  | —                     | Show version                                     |
+| `--help`       | `-h`  | —                     | Show help                                        |
 
 ## 🗂️ Supported file types
 
-| Extension | Processing |
-|-----------|------------|
+| Extension          | Processing                                                              |
+| ------------------ | ----------------------------------------------------------------------- |
 | `.md`, `.markdown` | Strips YAML front-matter, code blocks, links, images, emphasis, headers |
-| `.rst` | Strips directives, section underlines, inline markup |
-| `.txt`, `.text` | Passed through as-is |
+| `.rst`             | Strips directives, section underlines, inline markup                    |
+| `.txt`, `.text`    | Passed through as-is                                                    |
 
 ## 🏗️ Architecture
 
@@ -238,20 +238,20 @@ tests/
 
 ### Layer contract
 
-| Layer | Module(s) | Responsibility | Allowed deps | Forbidden |
-|-------|-----------|----------------|--------------|-----------|
-| **Interface** | `cli/app.py`, `cli/commands.py`, `cli/options.py`, `cli/rendering.py` | Parse args, render output, map exit codes | click, rich, Use-Case | torch, numpy, direct I/O |
-| **Use-Case** | `core/synthesis.py` | Orchestrate domain + infra into workflows | Domain, Infrastructure, numpy, soundfile | click, rich, `print()` |
-| **Domain** | `core/text.py`, `core/storage.py` | Pure text transforms, file listing | **stdlib only** (`re`, `os`, `time`) | Any third-party package |
-| **Infrastructure** | `core/model.py` | External system lifecycle (model load, GPU) | torch, qwen_tts, stdlib | click, rich, domain logic |
+| Layer              | Module(s)                                                             | Responsibility                              | Allowed deps                             | Forbidden                 |
+| ------------------ | --------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------- | ------------------------- |
+| **Interface**      | `cli/app.py`, `cli/commands.py`, `cli/options.py`, `cli/rendering.py` | Parse args, render output, map exit codes   | click, rich, Use-Case                    | torch, numpy, direct I/O  |
+| **Use-Case**       | `core/synthesis.py`                                                   | Orchestrate domain + infra into workflows   | Domain, Infrastructure, numpy, soundfile | click, rich, `print()`    |
+| **Domain**         | `core/text.py`, `core/storage.py`                                     | Pure text transforms, file listing          | **stdlib only** (`re`, `os`, `time`)     | Any third-party package   |
+| **Infrastructure** | `core/model.py`                                                       | External system lifecycle (model load, GPU) | torch, qwen_tts, stdlib                  | click, rich, domain logic |
 
 ### Cross-layer communication
 
-| Mechanism | Example | Purpose |
-|-----------|---------|---------|
-| `@dataclass(frozen=True)` | `ModelConfig`, `SynthesisResult` | Immutable snapshots passed between layers |
-| `@dataclass` (mutable) | `SynthesisConfig` | Aggregates user inputs before passing down |
-| Callbacks | `on_chunk(current, total, preview)` | Interface layer decides *how* to display progress |
+| Mechanism                 | Example                             | Purpose                                           |
+| ------------------------- | ----------------------------------- | ------------------------------------------------- |
+| `@dataclass(frozen=True)` | `ModelConfig`, `SynthesisResult`    | Immutable snapshots passed between layers         |
+| `@dataclass` (mutable)    | `SynthesisConfig`                   | Aggregates user inputs before passing down        |
+| Callbacks                 | `on_chunk(current, total, preview)` | Interface layer decides _how_ to display progress |
 
 ## 🧪 Testing
 
@@ -259,12 +259,12 @@ tests/
 
 Each architectural layer has its own test file with a tailored testing approach:
 
-| File | Layer | Tests | Mocking | Speed |
-|------|-------|-------|---------|-------|
-| `test_text.py` | Domain | 37 | None — pure functions, stdlib only | < 1ms per test |
-| `test_storage.py` | Domain | 9 | None — real temp files | < 1ms per test |
-| `test_synthesis.py` | Use-Case | 17 | `FakeModel` stubs infrastructure | < 100ms per test |
-| `test_cli.py` | Interface | 19 | `patch_model` + `CliRunner` | < 500ms per test |
+| File                | Layer     | Tests | Mocking                            | Speed            |
+| ------------------- | --------- | ----- | ---------------------------------- | ---------------- |
+| `test_text.py`      | Domain    | 37    | None — pure functions, stdlib only | < 1ms per test   |
+| `test_storage.py`   | Domain    | 9     | None — real temp files             | < 1ms per test   |
+| `test_synthesis.py` | Use-Case  | 17    | `FakeModel` stubs infrastructure   | < 100ms per test |
+| `test_cli.py`       | Interface | 19    | `patch_model` + `CliRunner`        | < 500ms per test |
 
 ### Running tests
 
@@ -281,49 +281,49 @@ python -m pytest tests/test_text.py -v
 
 ### Coverage
 
-| Module | Stmts | Miss | Cover |
-|--------|-------|------|-------|
-| `__init__.py` | 1 | 0 | 100% |
-| `cli/app.py` | 22 | 2 | 91% |
-| `cli/commands.py` | 103 | 8 | 92% |
-| `cli/options.py` | 12 | 0 | **100%** |
-| `cli/rendering.py` | 22 | 0 | **100%** |
-| `core/text.py` | 52 | 0 | **100%** |
-| `core/storage.py` | 35 | 0 | **100%** |
-| `core/synthesis.py` | 74 | 3 | 96% |
-| `core/model.py` | 33 | 15 | 55% |
-| **Total** | **358** | **30** | **92%** |
+| Module              | Stmts   | Miss   | Cover    |
+| ------------------- | ------- | ------ | -------- |
+| `__init__.py`       | 1       | 0      | 100%     |
+| `cli/app.py`        | 22      | 2      | 91%      |
+| `cli/commands.py`   | 103     | 8      | 92%      |
+| `cli/options.py`    | 12      | 0      | **100%** |
+| `cli/rendering.py`  | 22      | 0      | **100%** |
+| `core/text.py`      | 52      | 0      | **100%** |
+| `core/storage.py`   | 35      | 0      | **100%** |
+| `core/synthesis.py` | 74      | 3      | 96%      |
+| `core/model.py`     | 33      | 15     | 55%      |
+| **Total**           | **358** | **30** | **92%**  |
 
 > [!NOTE]
 > `core/model.py` coverage is lower by design — it wraps `torch` and `qwen_tts` which are mocked in tests. The remaining uncovered lines are the actual model loading path that requires a GPU.
 
 ### Coverage targets
 
-| Layer | Minimum | Target | Actual |
-|-------|---------|--------|--------|
-| Domain | 90% | 100% | ✅ 100% |
-| Use-Case | 80% | 90% | ✅ 96% |
-| Interface | 60% | 80% | ✅ 92% |
+| Layer     | Minimum | Target | Actual  |
+| --------- | ------- | ------ | ------- |
+| Domain    | 90%     | 100%   | ✅ 100% |
+| Use-Case  | 80%     | 90%    | ✅ 96%  |
+| Interface | 60%     | 80%    | ✅ 92%  |
 
 ## 🔒 Error handling & exit codes
 
 ### Error taxonomy
 
-| Category | Exception | CLI behavior |
-|----------|-----------|--------------|
-| File not found | `FileNotFoundError` | Print message, continue batch |
-| Unsupported format | `ValueError` | Print message, continue batch |
-| Empty content | `ValueError` | Print message, continue batch |
-| Model failure | `RuntimeError` | Print message, exit 1 |
-| Synthesis failure | `RuntimeError` | Print message, exit 1 |
+| Category           | Exception           | CLI behavior                  |
+| ------------------ | ------------------- | ----------------------------- |
+| File not found     | `FileNotFoundError` | Print message, continue batch |
+| Unsupported format | `ValueError`        | Print message, continue batch |
+| Empty content      | `ValueError`        | Print message, continue batch |
+| Model failure      | `RuntimeError`      | Print message, exit 1         |
+| Synthesis failure  | `RuntimeError`      | Print message, exit 1         |
 
 ### Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | All operations succeeded |
-| `1` | One or more operations failed |
-| `2` | CLI usage error (missing args, bad flags) |
+| Code | Meaning                                   |
+| ---- | ----------------------------------------- |
+| `0`  | All operations succeeded                  |
+| `1`  | One or more operations failed             |
+| `2`  | CLI usage error (missing args, bad flags) |
 
 Core modules never call `sys.exit()` — they raise typed exceptions. Only `cli/commands.py` converts exceptions to exit codes.
 
@@ -331,30 +331,30 @@ Core modules never call `sys.exit()` — they raise typed exceptions. Only `cli/
 
 Configuration follows a strict priority order: **CLI flags → Environment variables → Dataclass defaults**.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `QWEN_TTS_MODEL` | `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | HuggingFace model ID |
-| `QWEN_TTS_DEVICE` | `cuda:0` | Inference device |
-| `QWEN_TTS_OUTPUT_DIR` | `~/qwen-reader-audio` | Default output directory |
+| Variable              | Default                                | Description              |
+| --------------------- | -------------------------------------- | ------------------------ |
+| `QWEN_TTS_MODEL`      | `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | HuggingFace model ID     |
+| `QWEN_TTS_DEVICE`     | `cuda:0`                               | Inference device         |
+| `QWEN_TTS_OUTPUT_DIR` | `~/qwen-reader-audio`                  | Default output directory |
 
 Environment variables are read inside `default_factory` on config dataclasses — never scattered through application logic.
 
 ## 📋 Requirements
 
-| Dependency | Purpose |
-|------------|---------|
-| [qwen-tts](https://pypi.org/project/qwen-tts/) | Qwen3-TTS model inference |
-| [torch](https://pytorch.org/) | Deep learning runtime |
-| [soundfile](https://pypi.org/project/soundfile/) | WAV file I/O |
-| [numpy](https://numpy.org/) | Audio array operations |
-| [click](https://click.palletsprojects.com/) | CLI framework |
-| [rich](https://rich.readthedocs.io/) | Terminal formatting |
+| Dependency                                       | Purpose                   |
+| ------------------------------------------------ | ------------------------- |
+| [qwen-tts](https://pypi.org/project/qwen-tts/)   | Qwen3-TTS model inference |
+| [torch](https://pytorch.org/)                    | Deep learning runtime     |
+| [soundfile](https://pypi.org/project/soundfile/) | WAV file I/O              |
+| [numpy](https://numpy.org/)                      | Audio array operations    |
+| [click](https://click.palletsprojects.com/)      | CLI framework             |
+| [rich](https://rich.readthedocs.io/)             | Terminal formatting       |
 
 **Dev dependencies** (optional):
 
-| Dependency | Purpose |
-|------------|---------|
-| [pytest](https://docs.pytest.org/) | Test framework |
+| Dependency                                       | Purpose            |
+| ------------------------------------------------ | ------------------ |
+| [pytest](https://docs.pytest.org/)               | Test framework     |
 | [pytest-cov](https://pytest-cov.readthedocs.io/) | Coverage reporting |
 
 ## ✅ Readiness checklist

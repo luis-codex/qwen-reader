@@ -1,12 +1,26 @@
 {
   "version": "0.2",
   "words": [
-    "qwen",
-    "blockquotes",
-    "wavs",
     "Aiden",
     "bfloat",
+    "blockquotes",
+    "conftest",
+    "cuda",
+    "dataclass",
+    "dataclasses",
+    "esto",
+    "mktime",
+    "mundo",
+    "numpy",
+    "prueba",
+    "pyproject",
+    "pytest",
+    "qwen",
     "soundfile",
-    "torchaudio"
+    "stdlib",
+    "stmts",
+    "torchaudio",
+    "venv",
+    "wavs"
   ]
 }
